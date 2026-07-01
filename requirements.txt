@@ -1,0 +1,9 @@
+transformers==4.46.0
+datasets==3.0.1
+peft==0.13.2
+trl==0.11.4
+bitsandbytes==0.44.1
+accelerate==1.0.1
+torch==2.4.1
+gradio==5.1.0
+python-dotenv==1.0.1
