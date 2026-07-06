@@ -11,7 +11,7 @@ from trl import SFTTrainer, SFTConfig
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATASET_PATH = PROJECT_ROOT / "data" / "sft" / "train.jsonl"
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-CONSTITUTION_PATH = PROJECT_ROOT / "config" / "constitution.md"
+SYSTEM_PROMPT_PATH = PROJECT_ROOT / "config" / "system_prompt.md"
 
 def load_model_and_tokenizer():
     config = BitsAndBytesConfig(
@@ -35,7 +35,7 @@ def load_training_dataset(path, max_samples=None):
     if max_samples is not None:
         dataset = dataset.select(range(max_samples))
 
-    with open(CONSTITUTION_PATH, newline="", encoding="utf-8") as f:
+    with open(SYSTEM_PROMPT_PATH, newline="", encoding="utf-8") as f:
         constitution = f.read()
     
     def add_system_message(example):
@@ -55,7 +55,7 @@ def build_lora_config():
     )
     return config
 
-def build_training_args(output_dir, smoke_test):
+def build_training_args(output_dir, smoke_test = False):
     common = dict(
         output_dir = output_dir,
         per_device_train_batch_size=1,
@@ -74,16 +74,36 @@ def build_training_args(output_dir, smoke_test):
     return SFTConfig(**common, num_train_epochs=3, save_strategy='epoch')
 
 
+def train(model, tokenizer, dataset, training_args, lora_config):
+    trainer = SFTTrainer(
+        model = model,
+        train_dataset=dataset,
+        args=training_args,
+        tokenizer=tokenizer,
+        peft_config=lora_config,
+    )
+    trainer.train()
+    trainer.save_model()
+    return trainer
+
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Use only N samples (for smoke testing).")
+    parser.add_argument("--output-dir", type=str, required=True,
+                        help="Where to save the LoRA adapter.")
+    parser.add_argument("--smoke-test", action="store_true",
+                        help="Fast run for verifying the pipeline works.")
+    args = parser.parse_args()
+
     print("main() started")
     model, tokenizer = load_model_and_tokenizer()
-    # dataset = load_training_dataset(DATASET_PATH, 3)
-    # constitution = Path(CONSTITUTION_PATH).read_text(encoding='utf-8')
-    # print(len(tokenizer.encode(constitution)))
+    dataset = load_training_dataset(DATASET_PATH, args.max_samples)
     lora_config = build_lora_config()
-    model = get_peft_model(model, lora_config)
-    print(model.print_trainable_parameters())
+    training_args = build_training_args(args.output_dir, smoke_test=args.smoke_test)
+    train(model, tokenizer, dataset, training_args, lora_config)
+    print(f'Adapter saved to: {args.output_dir}')
 
 if __name__ == "__main__":
     main()
