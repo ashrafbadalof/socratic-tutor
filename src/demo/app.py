@@ -55,7 +55,12 @@ def generate_response(model, tokenizer, system_prompt, chat_history, user_messag
 def main():
     model, tokenizer = load_model_and_tokenizer()
     system_prompt = load_system_prompt()
-    reply = generate_response(model, tokenizer, system_prompt, [], "What is a for loop?")
+    reply = generate_response(model, tokenizer, system_prompt,
+    [
+        {"role": "user", "content": "What is a variable?"},
+        {"role": "assistant", "content": "Think about a labeled box. What might go inside?"},
+    ],
+    "Is it like a name for a value?")
     print("REPLY: ", reply)
 
 if __name__ == "__main__":
