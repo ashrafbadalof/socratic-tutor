@@ -22,7 +22,7 @@ def load_model_and_tokenizer():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, device_map = "auto", torch_dtype=torch.float16)
+    base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, device_map = "auto", dtype=torch.float16)
     model = PeftModel.from_pretrained(base, ADAPTER)
     model.eval()
     return model, tokenizer
@@ -32,6 +32,16 @@ def load_system_prompt():
         system_prmpt = f.read()
     return system_prmpt
 
+def normalize_content(msg):
+    content = msg["content"]
+    if isinstance(content, list):
+        text_parts = [
+            block["text"] for block in content
+            if isinstance(block, dict) and block.get("type" == "text")
+        ]
+        return {"role": msg["role"], "content": " ".join(text_parts)}
+    return msg
+
 def generate_response(model, tokenizer, system_prompt, chat_history, user_message):
     messages = [
         {
@@ -39,7 +49,7 @@ def generate_response(model, tokenizer, system_prompt, chat_history, user_messag
             "content":system_prompt,
         }
     ]
-    messages.extend(chat_history)
+    messages.extend(normalize_content(msg) for msg in chat_history)
     messages.append({
         "role":"user",
         "content":user_message,
@@ -52,16 +62,27 @@ def generate_response(model, tokenizer, system_prompt, chat_history, user_messag
     decoded_output = tokenizer.decode(new_tokens, skip_special_tokens = True)
     return decoded_output
 
+
+def build_interface(model, tokenizer, system_prompt):
+    def chat_fn(message, history):
+        return generate_response(model, tokenizer, system_prompt, history, message)
+    demo = gr.ChatInterface(fn=chat_fn, title = "Socratic Python Tutor",
+                            examples=["What is a for loop?","What does it mean to assign a variable?","How do I create a list in Python?"],
+                            description="Socratic tutor is for beginner Python programmers. Its goal is not to give answers, but to help the student arrive at answers themselves through guided questioning."
+                            )
+    return demo
+
+
 def main():
+    print('Loading model...')
     model, tokenizer = load_model_and_tokenizer()
     system_prompt = load_system_prompt()
-    reply = generate_response(model, tokenizer, system_prompt,
-    [
-        {"role": "user", "content": "What is a variable?"},
-        {"role": "assistant", "content": "Think about a labeled box. What might go inside?"},
-    ],
-    "Is it like a name for a value?")
-    print("REPLY: ", reply)
+    
+    print('Building interface')
+    demo = build_interface(model, tokenizer, system_prompt)
+
+    print('Launching...')
+    demo.launch(share=True)
 
 if __name__ == "__main__":
     main()
